@@ -9,7 +9,7 @@ from tempfile import NamedTemporaryFile
 # Load the Whisper model
 @st.cache_resource
 def load_model():
-    return whisper.load_model("medium")
+    return whisper.load_model("small")
 
 # Function to transcribe audio in chunks
 def transcribe_audio_in_chunks(audio_path, model, chunk_duration=10):
