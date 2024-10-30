@@ -10,22 +10,31 @@ from yt_dlp import YoutubeDL
 def load_model():
     return whisper.load_model("base")
 
-# Funzione per scaricare l'audio da YouTube usando yt-dlp
+# Funzione per scaricare e convertire l'audio da YouTube usando yt-dlp
 def download_youtube_audio(youtube_url):
     ydl_opts = {
         'format': 'bestaudio/best',
+        'outtmpl': 'youtube_audio.%(ext)s',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '192',
-        }],
-        'outtmpl': 'youtube_audio.%(ext)s',
+        }]
     }
     try:
         with YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(youtube_url, download=True)
             output_file = ydl.prepare_filename(info_dict)
-            return output_file
+
+            # Converti il file scaricato in .wav se necessario
+            if not output_file.endswith(".wav"):
+                audio_segment = AudioSegment.from_file(output_file)
+                wav_path = "youtube_audio.wav"
+                audio_segment.export(wav_path, format="wav")
+                os.remove(output_file)  # Rimuovi il file originale
+                return wav_path
+            else:
+                return output_file
     except Exception as e:
         st.error("Errore nel download dell'audio da YouTube. Verifica l'URL o prova con un altro video.")
         st.error(f"Dettagli dell'errore: {e}")
@@ -89,13 +98,6 @@ elif youtube_url:
     if st.button("Scarica e trascrivi audio da YouTube"):
         with st.spinner("Download dell'audio in corso da YouTube..."):
             audio_path = download_youtube_audio(youtube_url)
-        
-        if audio_path:
-            # Converti in formato .wav se necessario
-            audio_segment = AudioSegment.from_file(audio_path)
-            audio_path_wav = "youtube_audio.wav"
-            audio_segment.export(audio_path_wav, format="wav")
-            audio_path = audio_path_wav
 
 # Se c'è un file audio valido, avvia la trascrizione
 if audio_path and st.button("Avvia Trascrizione"):
@@ -111,5 +113,3 @@ if audio_path and st.button("Avvia Trascrizione"):
 
     # Pulisce i file temporanei dopo l'uso
     os.remove(audio_path)
-    if 'audio_path_wav' in locals():
-        os.remove(audio_path_wav)
