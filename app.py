@@ -1,61 +1,43 @@
 import streamlit as st
 import whisper
 import os
-import time
-from pathlib import Path
 from pydub import AudioSegment
 from tempfile import NamedTemporaryFile
-from pytube import YouTube
+from yt_dlp import YoutubeDL
 
-# Load the Whisper model
+# Carica il modello di Whisper
 @st.cache_resource
 def load_model():
     return whisper.load_model("base")
 
-# Function to transcribe audio in chunks
-def transcribe_audio_in_chunks(audio_path, model, chunk_duration=10):
-    audio = AudioSegment.from_file(audio_path)
-    total_duration = len(audio) / 1000  # Duration in seconds
-    transcription_text = ""
-
-    # Title styling
-    st.markdown("<h3 style='text-align: center; color: #ff4b4b;'>Real-Time Transcription</h3>", unsafe_allow_html=True)
-    st.markdown("<hr style='border: 1px solid #ff4b4b;'>", unsafe_allow_html=True)
-
-    # Container for real-time transcription
-    transcription_container = st.empty()
-
-    # Process each chunk and update transcription
-    for i in range(0, int(total_duration), chunk_duration):
-        start_time = i * 1000  # Start time in milliseconds
-        end_time = min((i + chunk_duration) * 1000, len(audio))  # End time
-        chunk = audio[start_time:end_time]
-
-        # Save the chunk to a temporary file
-        with NamedTemporaryFile(suffix=".wav") as temp_chunk_file:
-            chunk.export(temp_chunk_file.name, format="wav")
-            result = model.transcribe(temp_chunk_file.name)
-            transcription_text += result["text"] + " "  # Append the new text to the existing transcription
-
-            # Display the continuous transcription in the container
-            transcription_container.markdown(
-                f"<div style='font-size: 1.1em; color: #333333; padding: 10px; background-color: #f9f9f9; border-radius: 5px;'>{transcription_text}</div>",
-                unsafe_allow_html=True
-            )
-
-            # Simulate real-time delay
-            time.sleep(chunk_duration / 2)  # Adjust for faster updates
-
-    return transcription_text
-
-# Function to download audio from YouTube
+# Funzione per scaricare l'audio da YouTube usando yt-dlp
 def download_youtube_audio(youtube_url):
-    yt = YouTube(youtube_url)
-    audio_stream = yt.streams.filter(only_audio=True).first()
-    output_file = audio_stream.download(filename="youtube_audio.mp4")
-    return output_file
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'outtmpl': 'youtube_audio.%(ext)s',
+    }
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info(youtube_url, download=True)
+            output_file = ydl.prepare_filename(info_dict)
+            return output_file
+    except Exception as e:
+        st.error("Errore nel download dell'audio da YouTube. Verifica l'URL o prova con un altro video.")
+        st.error(f"Dettagli dell'errore: {e}")
+        return None
 
-# Streamlit UI - App layout and styling
+# Funzione per trascrivere l'audio
+def transcribe_audio(audio_path, model):
+    with st.spinner("Trascrizione in corso..."):
+        result = model.transcribe(audio_path)
+    return result["text"]
+
+# UI di Streamlit - layout e styling
 st.markdown("""
     <style>
         .stButton>button {
@@ -79,58 +61,55 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h1 style='text-align: center; color: #ff4b4b;'>Whisper Audio Transcription</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666666; font-size: 1.1em;'>Upload your audio file or enter a YouTube link to get a real-time transcription.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666666; font-size: 1.1em;'>Carica un file audio o inserisci un link a YouTube per ottenere la trascrizione.</p>", unsafe_allow_html=True)
 
-# Load the Whisper model (only "base" model)
+# Carica il modello Whisper (solo modello "base")
 model = load_model()
 
-# Option to upload an audio file
-uploaded_file = st.file_uploader("Upload an audio file", type=["wav", "mp3", "m4a", "ogg"])
+# Opzione per caricare un file audio
+uploaded_file = st.file_uploader("Carica un file audio", type=["wav", "mp3", "m4a", "ogg"])
 
-# Option to enter a YouTube URL
-youtube_url = st.text_input("Or enter a YouTube video URL")
+# Opzione per inserire un URL di YouTube
+youtube_url = st.text_input("Oppure inserisci un URL di YouTube")
 
+# Variabili per salvare il percorso dell'audio da trascrivere
+audio_path = None
+
+# Gestisci il caricamento dell'audio
 if uploaded_file is not None:
     st.audio(uploaded_file)
-    st.markdown("<div class='uploaded-audio'>Audio file uploaded successfully. Click below to start transcribing.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='uploaded-audio'>File audio caricato correttamente. Clicca sotto per avviare la trascrizione.</div>", unsafe_allow_html=True)
 
-    # Save the uploaded audio file to a temporary location
+    # Salva il file audio caricato in una posizione temporanea
     with NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio_file:
         temp_audio_file.write(uploaded_file.getvalue())
-        temp_audio_path = temp_audio_file.name
-
-    # Start transcription in real-time chunks
-    if st.button("Start Real-Time Transcription"):
-        transcription = transcribe_audio_in_chunks(temp_audio_path, model)
-        st.subheader("Final Transcription:")
-        st.markdown(
-            f"<div style='font-size: 1.2em; color: #333333; padding: 15px; border-radius: 8px; background-color: #f0f0f0;'>{transcription}</div>",
-            unsafe_allow_html=True
-        )
-    
-    # Clean up the temporary file after use
-    os.remove(temp_audio_path)
+        audio_path = temp_audio_file.name
 
 elif youtube_url:
-    if st.button("Download and Transcribe YouTube Audio"):
-        with st.spinner("Downloading audio from YouTube..."):
+    if st.button("Scarica e trascrivi audio da YouTube"):
+        with st.spinner("Download dell'audio in corso da YouTube..."):
             audio_path = download_youtube_audio(youtube_url)
         
-        # Convert to .wav format
-        audio_segment = AudioSegment.from_file(audio_path)
-        audio_path_wav = "youtube_audio.wav"
-        audio_segment.export(audio_path_wav, format="wav")
-        
-        # Start transcription in real-time chunks
-        with st.spinner("Starting transcription..."):
-            transcription = transcribe_audio_in_chunks(audio_path_wav, model)
-        
-        st.subheader("Final Transcription:")
-        st.markdown(
-            f"<div style='font-size: 1.2em; color: #333333; padding: 15px; border-radius: 8px; background-color: #f0f0f0;'>{transcription}</div>",
-            unsafe_allow_html=True
-        )
-        
-        # Clean up downloaded files
-        os.remove(audio_path)
+        if audio_path:
+            # Converti in formato .wav se necessario
+            audio_segment = AudioSegment.from_file(audio_path)
+            audio_path_wav = "youtube_audio.wav"
+            audio_segment.export(audio_path_wav, format="wav")
+            audio_path = audio_path_wav
+
+# Se c'è un file audio valido, avvia la trascrizione
+if audio_path and st.button("Avvia Trascrizione"):
+    with st.spinner("Trascrizione in corso..."):
+        transcription = transcribe_audio(audio_path, model)
+
+    # Mostra la trascrizione finale
+    st.subheader("Trascrizione Finale:")
+    st.markdown(
+        f"<div style='font-size: 1.2em; color: #333333; padding: 15px; border-radius: 8px; background-color: #f0f0f0;'>{transcription}</div>",
+        unsafe_allow_html=True
+    )
+
+    # Pulisce i file temporanei dopo l'uso
+    os.remove(audio_path)
+    if 'audio_path_wav' in locals():
         os.remove(audio_path_wav)
