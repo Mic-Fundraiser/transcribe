@@ -3,87 +3,72 @@ import whisper
 import os
 import time
 from pathlib import Path
-import logging
+from pydub import AudioSegment
+from tempfile import NamedTemporaryFile
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-
-# Load the Whisper model at the start to avoid reloading
+# Load the Whisper model
 @st.cache_resource
-def load_model(model_size):
-    logging.info(f"Loading Whisper model: {model_size}")
+def load_model(model_size="base"):
     return whisper.load_model(model_size)
 
-# Function to transcribe audio
-def transcribe_with_whisper(audio_file, model, language_option):
-    temp_audio_path = Path("temp_audio_file") / audio_file.name
+# Function to transcribe audio in chunks
+def transcribe_audio_in_chunks(audio_path, model, chunk_duration=10):
+    audio = AudioSegment.from_file(audio_path)
+    total_duration = len(audio) / 1000  # Duration in seconds
+    transcription_text = ""
+    
+    st.write("Starting real-time transcription...")
 
-    # Ensure the temp directory exists
-    temp_audio_path.parent.mkdir(exist_ok=True)
+    # Process each chunk and update transcription
+    for i in range(0, int(total_duration), chunk_duration):
+        start_time = i * 1000  # Start time in milliseconds
+        end_time = min((i + chunk_duration) * 1000, len(audio))  # End time
+        chunk = audio[start_time:end_time]
 
-    # Save the uploaded audio file to a temporary file
-    with open(temp_audio_path, "wb") as f:
-        f.write(audio_file.getvalue())
+        # Save the chunk to a temporary file
+        with NamedTemporaryFile(suffix=".wav") as temp_chunk_file:
+            chunk.export(temp_chunk_file.name, format="wav")
+            result = model.transcribe(temp_chunk_file.name)
+            transcription_text += result["text"] + " "
 
-    # Display progress and start timing
-    with st.spinner("Transcribing audio..."):
-        start_time = time.time()
-        # Set options for the transcription
-        options = {}
-        if language_option != "Auto-detect":
-            options["language"] = language_option
+            # Display the transcription so far
+            st.write("Transcription (in progress):")
+            st.write(transcription_text)
+            
+            # Simulate real-time delay
+            time.sleep(chunk_duration / 2)  # Adjust for faster updates
 
-        result = model.transcribe(str(temp_audio_path), **options)
-        end_time = time.time()
-
-    os.remove(temp_audio_path)  # Clean up
-
-    # Display processing time
-    st.write(f"Transcription completed in {end_time - start_time:.2f} seconds")
-    return result['text']
+    return transcription_text
 
 # Streamlit UI
-st.title("Advanced Whisper Audio Transcription")
+st.title("Near Real-Time Whisper Transcription")
 
-# Sidebar for options
-st.sidebar.title("Settings")
-
-# Model selection
+# Sidebar for model settings
 model_size = st.sidebar.selectbox(
     "Select Whisper Model Size",
     ("tiny", "base", "small", "medium", "large"),
-    index=1  # default to 'base'
+    index=1
 )
 
-# Language selection
-language_option = st.sidebar.selectbox(
-    "Transcription Language",
-    ("Auto-detect", "English", "Spanish", "French", "German", "Italian", "Other")
-)
-
-if language_option == "Other":
-    language_option = st.sidebar.text_input("Enter Language Code (e.g., 'en', 'es', 'fr')")
-
-# Load the model
+# Load the Whisper model
 model = load_model(model_size)
 
-# Upload the audio file
+# File uploader for audio
 uploaded_file = st.file_uploader("Upload an audio file", type=["wav", "mp3", "m4a", "ogg"])
 
 if uploaded_file is not None:
-    # Display audio player
     st.audio(uploaded_file)
+    
+    # Save the uploaded audio file to a temporary location
+    with NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio_file:
+        temp_audio_file.write(uploaded_file.getvalue())
+        temp_audio_path = temp_audio_file.name
 
-    # Transcribe button
-    if st.button("Transcribe"):
-        transcription = transcribe_with_whisper(uploaded_file, model, language_option)
-        st.subheader("Transcription:")
+    # Start transcription in real-time chunks
+    if st.button("Start Real-Time Transcription"):
+        transcription = transcribe_audio_in_chunks(temp_audio_path, model)
+        st.subheader("Final Transcription:")
         st.write(transcription)
-
-        # Option to download the transcription
-        st.download_button(
-            label="Download Transcription",
-            data=transcription,
-            file_name="transcription.txt",
-            mime="text/plain"
-        )
+    
+    # Clean up the temporary file after use
+    os.remove(temp_audio_path)
