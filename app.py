@@ -26,15 +26,12 @@ def download_youtube_audio(youtube_url):
             info_dict = ydl.extract_info(youtube_url, download=True)
             output_file = ydl.prepare_filename(info_dict)
 
-            # Converti il file scaricato in .wav se necessario
-            if not output_file.endswith(".wav"):
-                audio_segment = AudioSegment.from_file(output_file)
-                wav_path = "youtube_audio.wav"
-                audio_segment.export(wav_path, format="wav")
-                os.remove(output_file)  # Rimuovi il file originale
-                return wav_path
-            else:
-                return output_file
+            # Converte sempre il file scaricato in .wav
+            audio_segment = AudioSegment.from_file(output_file)
+            wav_path = "youtube_audio.wav"
+            audio_segment.export(wav_path, format="wav")
+            os.remove(output_file)  # Rimuovi il file originale .mp3 o .webm
+            return wav_path
     except Exception as e:
         st.error("Errore nel download dell'audio da YouTube. Verifica l'URL o prova con un altro video.")
         st.error(f"Dettagli dell'errore: {e}")
