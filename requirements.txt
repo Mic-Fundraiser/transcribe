@@ -2,4 +2,4 @@ streamlit
 openai-whisper
 torch
 pydub
-pytube
+yt-dlp
