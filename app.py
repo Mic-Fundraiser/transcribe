@@ -21,6 +21,9 @@ def transcribe_audio_in_chunks(audio_path, model, chunk_duration=10):
     st.markdown("<h3 style='text-align: center; color: #ff4b4b;'>Real-Time Transcription</h3>", unsafe_allow_html=True)
     st.markdown("<hr style='border: 1px solid #ff4b4b;'>", unsafe_allow_html=True)
 
+    # Container for real-time transcription
+    transcription_container = st.empty()
+
     # Process each chunk and update transcription
     for i in range(0, int(total_duration), chunk_duration):
         start_time = i * 1000  # Start time in milliseconds
@@ -31,10 +34,13 @@ def transcribe_audio_in_chunks(audio_path, model, chunk_duration=10):
         with NamedTemporaryFile(suffix=".wav") as temp_chunk_file:
             chunk.export(temp_chunk_file.name, format="wav")
             result = model.transcribe(temp_chunk_file.name)
-            transcription_text += result["text"] + " "
+            transcription_text += result["text"] + " "  # Append the new text to the existing transcription
 
-            # Display the transcription so far in a continuous manner with styled markdown
-            st.markdown("<div style='font-size: 1.1em; color: #333333; margin-top: 20px; padding: 10px; border-radius: 5px; background-color: #f9f9f9;'>" + transcription_text + "</div>", unsafe_allow_html=True)
+            # Display the continuous transcription in the container
+            transcription_container.markdown(
+                f"<div style='font-size: 1.1em; color: #333333; padding: 10px; background-color: #f9f9f9; border-radius: 5px;'>{transcription_text}</div>",
+                unsafe_allow_html=True
+            )
 
             # Simulate real-time delay
             time.sleep(chunk_duration / 2)  # Adjust for faster updates
@@ -86,7 +92,10 @@ if uploaded_file is not None:
     if st.button("Start Real-Time Transcription"):
         transcription = transcribe_audio_in_chunks(temp_audio_path, model)
         st.subheader("Final Transcription:")
-        st.markdown("<div style='font-size: 1.2em; color: #333333; padding: 15px; border-radius: 8px; background-color: #f0f0f0;'>" + transcription + "</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div style='font-size: 1.2em; color: #333333; padding: 15px; border-radius: 8px; background-color: #f0f0f0;'>{transcription}</div>",
+            unsafe_allow_html=True
+        )
     
     # Clean up the temporary file after use
     os.remove(temp_audio_path)
