@@ -10,7 +10,7 @@ from yt_dlp import YoutubeDL
 def load_model():
     return whisper.load_model("base")
 
-# Funzione per scaricare e convertire l'audio da YouTube usando yt-dlp
+# Funzione per scaricare e convertire l'audio da YouTube in .wav usando yt-dlp
 def download_youtube_audio(youtube_url):
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -24,13 +24,13 @@ def download_youtube_audio(youtube_url):
     try:
         with YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(youtube_url, download=True)
-            output_file = ydl.prepare_filename(info_dict)
+            output_file = ydl.prepare_filename(info_dict)  # Nome del file scaricato, es: youtube_audio.mp3
 
-            # Converte sempre il file scaricato in .wav
-            audio_segment = AudioSegment.from_file(output_file)
+            # Converte il file scaricato in .wav
             wav_path = "youtube_audio.wav"
+            audio_segment = AudioSegment.from_file(output_file)
             audio_segment.export(wav_path, format="wav")
-            os.remove(output_file)  # Rimuovi il file originale .mp3 o .webm
+            os.remove(output_file)  # Rimuovi il file originale (.mp3 o .webm)
             return wav_path
     except Exception as e:
         st.error("Errore nel download dell'audio da YouTube. Verifica l'URL o prova con un altro video.")
